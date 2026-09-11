@@ -1,0 +1,23 @@
+# MCPize Configuration
+# Docs: https://mcpize.com/docs/mcpize-yaml
+
+version: 1
+
+name: "Opportunity Intelligence"
+slug: "opportunity-intelligence"
+
+runtime: typescript
+entry: "dist/index.js"
+
+build:
+  install: "npm install"
+  command: "npm run build"
+
+start:
+  type: stdio
+  command: "node"
+  args:
+    - "dist/index.js"
+
+bridge:
+  mode: stdio

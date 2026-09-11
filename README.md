@@ -1,6 +1,18 @@
 # JnarPro IO — Opportunity Intelligence
 
+[![MCPize](https://mcpize.com/badge/@jnar0315/opportunity-intelligence)](https://mcpize.com/mcp/opportunity-intelligence)
+
 AI-powered opportunity analysis and scoring engine for JnarPro IO.
+
+## Connect via MCPize
+
+Use this MCP server instantly with no local installation:
+
+```bash
+npx -y mcpize connect @jnar0315/opportunity-intelligence --client claude
+```
+
+Or connect at: **https://mcpize.com/mcp/opportunity-intelligence**
 
 ## Purpose
 
