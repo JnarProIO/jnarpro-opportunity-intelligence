@@ -16,39 +16,37 @@ const OpportunitySchema = z.object({
 
 type Opportunity = z.infer<typeof OpportunitySchema>;
 
-function scoreOpportunity(opportunity: Opportunity) {
+function evaluateOpportunity(opportunity: Opportunity) {
+  const o = OpportunitySchema.parse(opportunity);
+
   let score = 0;
 
-  if (opportunity.recurringRevenue) score += 25;
-  if (opportunity.zeroUpfrontCost) score += 20;
-  if (opportunity.automationReady) score += 20;
-  if (opportunity.legitimateAcquisition) score += 20;
-  if (opportunity.scalable) score += 10;
+  if (o.recurringRevenue) score += 25;
+  if (o.zeroUpfrontCost) score += 20;
+  if (o.automationReady) score += 20;
+  if (o.legitimateAcquisition) score += 20;
+  if (o.scalable) score += 10;
 
-  score += Math.min(opportunity.commissionRate / 20, 5);
-
-  return Math.round(score);
-}
-function qualifyOpportunity(opportunity: Opportunity) {
-  const validated = OpportunitySchema.parse(opportunity);
-  const score = scoreOpportunity(validated);
+  score += Math.min(o.commissionRate / 20, 5);
+  score = Math.round(score);
 
   const qualified =
-    validated.recurringRevenue &&
-    validated.zeroUpfrontCost &&
-    validated.automationReady &&
-    validated.legitimateAcquisition &&
-    validated.scalable &&
+    o.recurringRevenue &&
+    o.zeroUpfrontCost &&
+    o.automationReady &&
+    o.legitimateAcquisition &&
+    o.scalable &&
     score >= 80;
 
   return {
-    ...validated,
+    ...o,
     score,
     tier: qualified ? "TIER_1" : score >= 60 ? "TIER_2" : "TIER_3",
     qualified,
   };
 }
-function createServer() {
+
+function createMcpServer() {
   const server = new McpServer({
     name: "JnarPro IO Opportunity Intelligence",
     version: "1.0.0",
@@ -56,7 +54,7 @@ function createServer() {
 
   server.tool(
     "score_opportunity",
-    "Score an online revenue opportunity for JnarPro IO.",
+    "Evaluate and score a potential recurring-revenue opportunity for JnarPro IO.",
     {
       name: z.string(),
       recurringRevenue: z.boolean(),
@@ -67,7 +65,7 @@ function createServer() {
       commissionRate: z.number().min(0).max(100),
     },
     async (input) => {
-      const result = qualifyOpportunity(input);
+      const result = evaluateOpportunity(input);
 
       return {
         content: [
@@ -80,11 +78,9 @@ function createServer() {
     }
   );
 
-  return server;
-}
   server.tool(
     "system_status",
-    "Return the current status and qualification rules for JnarPro IO.",
+    "Return the current JnarPro IO Opportunity Intelligence system status.",
     {},
     async () => ({
       content: [
@@ -95,13 +91,13 @@ function createServer() {
               system: "JnarPro IO",
               module: "Opportunity Intelligence",
               status: "online",
-              requirements: [
-                "$0 upfront cost",
-                "recurring revenue",
-                "automation capable",
-                "legitimate customer acquisition",
-                "scalable",
-              ],
+              qualificationRules: {
+                zeroUpfrontCost: true,
+                recurringRevenueRequired: true,
+                automationRequired: true,
+                legitimateAcquisitionRequired: true,
+                scalabilityRequired: true,
+              },
             },
             null,
             2
@@ -114,44 +110,103 @@ function createServer() {
   return server;
 }
 
-const transports = new Map<string, SSEServerTransport>();
+const transports: Record<string, SSEServerTransport> = {};
 
 const httpServer = http.createServer(async (req, res) => {
-  const url = new URL(req.url ?? "/", `http://${req.headers.host ?? "localhost"}`);
+  try {
+    const url = new URL(
+      req.url ?? "/",
+      `http://${req.headers.host ?? "localhost"}`
+    );
 
-  if (req.method === "GET" && url.pathname === "/sse") {
-    const transport = new SSEServerTransport("/messages", res);
-    transports.set(transport.sessionId, transport);
+    if (req.method === "GET" && url.pathname === "/") {
+      res.writeHead(200, {
+        "Content-Type": "application/json",
+      });
 
-    res.on("close", () => {
-      transports.delete(transport.sessionId);
-    });
+      res.end(
+        JSON.stringify({
+          name: "JnarPro IO Opportunity Intelligence",
+          status: "online",
+          transport: "sse",
+          endpoint: "/sse",
+        })
+      );
 
-    const server = createServer();
-    await server.connect(transport);
-    return;
-  }
-
-  if (req.method === "POST" && url.pathname === "/messages") {
-    const sessionId = url.searchParams.get("sessionId");
-    const transport = sessionId ? transports.get(sessionId) : undefined;
-
-    if (!transport) {
-      res.writeHead(404);
-      res.end("Unknown session");
       return;
     }
 
-    await transport.handlePostMessage(req, res);
-    return;
-  }
+    if (req.method === "GET" && url.pathname === "/sse") {
+      const server = createMcpServer();
+      const transport = new SSEServerTransport("/messages", res);
 
-  res.writeHead(404);
-  res.end("Not found");
+      transports[transport.sessionId] = transport;
+
+      res.on("close", () => {
+        delete transports[transport.sessionId];
+      });
+
+      await server.connect(transport);
+      return;
+    }
+
+    if (req.method === "POST" && url.pathname === "/messages") {
+      const sessionId = url.searchParams.get("sessionId");
+
+      if (!sessionId) {
+        res.writeHead(400);
+        res.end("Missing sessionId");
+        return;
+      }
+
+      const transport = transports[sessionId];
+
+      if (!transport) {
+        res.writeHead(404);
+        res.end("Unknown MCP session");
+        return;
+      }
+
+      let body = "";
+
+      req.on("data", (chunk) => {
+        body += chunk.toString();
+      });
+
+      req.on("end", async () => {
+        try {
+          const parsedBody = body ? JSON.parse(body) : undefined;
+
+          await transport.handlePostMessage(req, res, parsedBody);
+        } catch (error) {
+          console.error("MCP message error:", error);
+
+          if (!res.headersSent) {
+            res.writeHead(500);
+            res.end("Internal server error");
+          }
+        }
+      });
+
+      return;
+    }
+
+    res.writeHead(404);
+    res.end("Not found");
+  } catch (error) {
+    console.error("Server error:", error);
+
+    if (!res.headersSent) {
+      res.writeHead(500);
+      res.end("Internal server error");
+    }
+  }
 });
 
 const port = Number(process.env.PORT ?? 3000);
 
 httpServer.listen(port, "0.0.0.0", () => {
-  console.error(`JnarPro IO Opportunity Intelligence running on port ${port}`);
+  console.error(
+    `JnarPro IO Opportunity Intelligence listening on port ${port}`
+  );
 });
