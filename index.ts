@@ -354,14 +354,7 @@ httpServer.listen(port, "0.0.0.0", () => {
   console.error(
     `JnarPro IO Opportunity Intelligence running on port ${port}`
   );
-});            null,
-            2
-          ),
-        },
-      ],
-    })
-  );
-
+});            
   return server;
 }
 
