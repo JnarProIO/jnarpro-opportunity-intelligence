@@ -113,6 +113,94 @@ function createMcpServer() {
   return server;
 }
 
+async function readJsonBody(
+  req: http.IncomingMessage
+): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    let body = "";
+
+    req.on("data", (chunk) => {
+      body += chunk.toString();
+    });
+
+    req.on("end", () => {
+      if (!body) {
+        resolve(undefined);
+        return;
+      }
+
+      try {
+        resolve(JSON.parse(body));
+      } catch (error) {
+        reject(error);
+      }
+    });
+
+    req.on("error", reject);
+  });
+}
+
+const httpTransports: Record<
+  string,
+  StreamableHTTPServerTransport
+> = {};
+
+const sseTransports: Record<string, SSEServerTransport> = {};
+
+async function handleStreamableHttp(
+  req: http.IncomingMessage,
+  res: http.ServerResponse
+) {
+  try {
+    const sessionHeader = req.headers["mcp-session-id"];
+
+    const sessionId =
+      typeof sessionHeader === "string"
+        ? sessionHeader
+        : undefined;
+
+    let transport: StreamableHTTPServerTransport | undefined;
+
+    if (sessionId) {
+      transport = httpTransports[sessionId];
+    }
+
+    let body: unknown = undefined;
+
+    if (req.method === "POST") {
+      body = await readJsonBody(req);
+    }
+
+    if (
+      !transport &&
+      req.method === "POST" &&
+      isInitializeRequest(body)
+    ) {
+      transport = new StreamableHTTPServerTransport({
+        sessionIdGenerator: () => randomUUID(),
+
+        onsessioninitialized: (newSessionId) => {
+          if (transport) {
+            httpTransports[newSessionId] = transport;
+          }
+        },
+      });
+
+      transport.onclose = () => {
+        if (                "scalable",
+              ],
+            },
+            null,
+            2
+          ),
+        },
+      ],
+    })
+  );
+
+  return server;
+}
+
 async function readJsonBody(req: http.IncomingMessage): Promise<unknown> {
   return new Promise((resolve, reject) => {
     let body = "";
